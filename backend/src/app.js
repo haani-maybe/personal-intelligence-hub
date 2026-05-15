@@ -2,8 +2,8 @@ import express from "express"
 import cors from "cors"
 
 
-import taskRoutes from "../routes/tasks.routes.js";
-import aiRoutes from "../routes/ai.routes.js";
+import taskRoutes from "./routes/tasks.routes.js";
+import aiRoutes from "./routes/ai.routes.js";
 
 const app = express();
 

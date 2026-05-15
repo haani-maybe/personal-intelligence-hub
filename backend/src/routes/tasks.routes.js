@@ -3,9 +3,13 @@ import express from "express"
 const router = express.Router()
 import {tasks} from "../data/tasks.store.js"
 
+import {scoreTask} from "../services/ai.service.js"
+
 //gets tasks above, turn to json, so frontend can utilize
 router.get("/", (req, res) => {
-    res.json(tasks);
+    //auto scores everytime it fetches tasks from data
+    const scoredTasks = tasks.map(scoreTask)
+    res.json(scoredTasks);
 });
 
 //TOGGLE TASK COMPLETION
@@ -19,7 +23,11 @@ router.patch("/:id", (req, res) => {
     
     task.completed = !task.completed
 
-    res.json(task); //updated task sent back as json to frontend (http response)
+    //add in update by scoring task again
+    //because a completed task obv has 0 priority
+    const scored = scoreTask(task); 
+
+    res.json(scored); //updated task sent back as json to frontend (http response)
 });
 
 export default router;
