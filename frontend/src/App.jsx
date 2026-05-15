@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Brain, Search, Bell, Settings, LayoutDashboard, 
   CheckSquare, Mail, MessageSquare, Zap, Clock, 
@@ -67,11 +67,25 @@ const activityLog = [
 ];
 
 function App() {
-  const [tasks, setTasks] = useState(mockTasks);
+  const [tasks, setTasks] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const toggleTask = (id) => {
-    setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
+  useEffect(() => {
+    fetch("http://localhost:5000/api/tasks")
+    .then(res => res.json())
+    .then(data => setTasks(data));
+  }, []);
+
+  const toggleTask = async(id) => {
+    const res = await fetch(`http://localhost:5000/api/tasks/${id}`, {
+        method: "PATCH"
+    });
+    //update backend 
+    const updatedTask = await res.json();
+    setTasks(tasks.map(t=>
+      t.id == id ? updatedTask : t
+    ));
+
   };
 
   return (
