@@ -1,28 +1,7 @@
 import express from "express"
 
 const router = express.Router()
-
-// temporary in-memory data (we'll replace with DB later)
-let tasks = [
-  {
-    id: 1,
-    title: "Review Q3 Marketing Strategy",
-    source: "email",
-    priority: "high",
-    score: 98,
-    time: "2 hours left",
-    completed: false
-  },
-  {
-    id: 2,
-    title: "Approve Backend Architecture PR",
-    source: "github",
-    priority: "high",
-    score: 94,
-    time: "3 hours left",
-    completed: false
-  }
-];
+import {tasks} from "../data/tasks.store.js"
 
 //gets tasks above, turn to json, so frontend can utilize
 router.get("/", (req, res) => {
@@ -34,13 +13,13 @@ router.get("/", (req, res) => {
 
 router.patch("/:id", (req, res) => {
     const id = parseInt(req.params.id);
-    
-    tasks = tasks.map(task => 
-        task.id == id ? {...task, completed: !task.completed} : task
-    );
+    const task = tasks.find(t=>t.id == id);
 
-    const updatedTask = tasks.find(t => t.id == id);
-    res.json(updatedTask); //updated task sent back as json to frontend (http response)
+    if(!task) return res.status(404).json({error: "Not found"})
+    
+    task.completed = !task.completed
+
+    res.json(task); //updated task sent back as json to frontend (http response)
 });
 
 export default router;
