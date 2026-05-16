@@ -1,30 +1,23 @@
+//SEPARATING DATABASE LAYER AND AI LAYER.
+//thats why this routes file NO LONGER modifies/accesses DB.
+
+//because Database Layer != AI Layer
+
+
 import express from "express"
-import { tasks } from "../data/tasks.store.js";
+import {scoreTask} from "../services/ai.service.js"
 
 const router = express.Router()
 
-//front and backend send title, source and time 
-//whereas AI sends priority, score and reasoning
-router.post("/score-task", async (req, res) => {
-    const {id} = req.body;
 
-    const task = tasks.find(t=> t.id == id);
+//this is our request for AI score WITHOUT altering database.
+router.post("/score-task", (req, res) => {
+    const task = req.body;
 
-    if(!task){
-        return res.status(404).json({error:"Task not found"});
+    if (!task || !task.title){
+        return res.status(400).json({error: "invalid task data :("})
     }
-
-
-    //PLACEHOLDER AI LOGIC (MOCK !!!)
-    let priority = "low"
-    let score = 40
-    if(task.title.toLowerCase().includes("review")){
-        priority = "high"
-        score = 90
-    }
-    task.priority = priority;
-    task.score = score
-    res.json(task)
+    const scored = scoreTask(task)
+    res.json(scored)
 })
-
 export default router;
