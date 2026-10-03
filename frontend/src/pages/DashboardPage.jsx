@@ -1,275 +1,197 @@
-import React, { useState, useEffect } from 'react';
-import { CheckCircle2, Plus } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
-} from 'recharts';
-import { apiGet, apiPost, apiPatch, timeAgo } from '../api.js';
+  LayoutDashboard, CheckCircle2, Mail, FileText,
+  TrendingUp, Zap, RefreshCw, ChevronRight, AlertCircle,
+  Clock, Circle
+} from 'lucide-react';
+import { apiGet, apiPost, timeAgo } from '../api.js';
+
+const PRIORITY_COLORS = {
+  critical: 'var(--danger)',
+  high: 'var(--warning)',
+  medium: '#60a5fa',
+  low: 'var(--text-muted)',
+};
+
+function StatCard({ icon: Icon, label, value, sub, color }) {
+  return (
+    <div className="panel glass stat-card">
+      <div className="stat-card-top">
+        <Icon size={16} style={{ color: color || 'var(--text-secondary)' }} />
+        <span className="stat-label">{label}</span>
+      </div>
+      <div className="stat-value">{value ?? '—'}</div>
+      {sub && <div className="stat-sub">{sub}</div>}
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const [tasks, setTasks] = useState([]);
-  const [activities, setActivities] = useState([]);
+  const [emails, setEmails] = useState([]);
+  const [notes, setNotes] = useState([]);
+  const [activity, setActivity] = useState([]);
+  const [brief, setBrief] = useState(null);
+  const [briefLoading, setBriefLoading] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [newTaskTitle, setTaskTitle] = useState("");
-  const [workflowLoading, setWorkflowLoading] = useState(false);
 
-  // Fetch tasks + activity on mount
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      try {
-        const [tasksData, activityData] = await Promise.all([
-          apiGet("/tasks"),
-          apiGet("/activity?limit=10"),
-        ]);
-        setTasks(tasksData);
-        setActivities(activityData);
-      } catch (err) {
-        console.error("Dashboard load error:", err.message);
-      } finally {
-        setLoading(false);
-      }
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [t, e, n, a] = await Promise.all([
+        apiGet('/tasks'),
+        apiGet('/emails?limit=100'),
+        apiGet('/notes?limit=100'),
+        apiGet('/activity?limit=10'),
+      ]);
+      setTasks(t);
+      setEmails(e);
+      setNotes(n);
+      setActivity(a);
+    } catch (err) {
+      console.error('Dashboard load error:', err.message);
+    } finally {
+      setLoading(false);
     }
-    load();
   }, []);
 
-  // Computed metrics — derived from real task data
-  const totalTasks = tasks.length;
-  const completedTasks = tasks.filter(t => t.completed).length;
-  const pendingTasks = totalTasks - completedTasks;
-  const highPriorityTasks = tasks.filter(t => !t.completed && (t.priority === "high" || t.priority === "critical")).length;
-  const productivityScore = totalTasks > 0
-    ? Math.round((completedTasks / totalTasks) * 100)
-    : 0;
+  useEffect(() => { load(); }, [load]);
 
-  // Build chart data from task scores (group by creation hour)
-  const chartData = React.useMemo(() => {
-    if (tasks.length === 0) return [];
-
-    const hourMap = {};
-    tasks.forEach(t => {
-      if (!t.createdAt) return;
-      const hour = new Date(t.createdAt).getHours();
-      const timeLabel = `${String(hour).padStart(2, '0')}:00`;
-      if (!hourMap[timeLabel]) {
-        hourMap[timeLabel] = { time: timeLabel, score: 0, tasks: 0, total: 0 };
-      }
-      hourMap[timeLabel].total += t.score || 0;
-      hourMap[timeLabel].tasks += 1;
-    });
-
-    return Object.values(hourMap)
-      .map(h => ({ ...h, score: h.tasks > 0 ? Math.round(h.total / h.tasks) : 0 }))
-      .sort((a, b) => a.time.localeCompare(b.time));
-  }, [tasks]);
-
-  // Greeting based on time of day
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
-
-  const toggleTask = async (id) => {
-    const updatedTask = await apiPatch(`/tasks/${id}`);
-    setTasks(prev => prev.map(t => t._id === updatedTask._id ? updatedTask : t));
-  };
-
-  const runWorkflow = async () => {
-    if (workflowLoading) return;
-    setWorkflowLoading(true);
+  const generateBrief = async () => {
+    setBriefLoading(true);
     try {
-      await apiPost("/n8n/trigger", { workflow: "email-ingest" });
-      // Refresh data after triggering
-      const [tasksData, activityData] = await Promise.all([
-        apiGet("/tasks"),
-        apiGet("/activity?limit=10"),
-      ]);
-      setTasks(tasksData);
-      setActivities(activityData);
+      const result = await apiPost('/ai/daily-brief');
+      setBrief(result);
     } catch (err) {
-      console.error("Workflow trigger failed:", err.message);
+      console.error('Brief error:', err.message);
     } finally {
-      setWorkflowLoading(false);
+      setBriefLoading(false);
     }
   };
 
-  const createTask = async () => {
-    if (!newTaskTitle.trim()) return;
-    try {
-      const createdTask = await apiPost("/tasks", {
-        title: newTaskTitle,
-        source: "Manual",
-        time: "Today",
-        completed: false,
-      });
-      setTasks(prev => [createdTask, ...prev]);
-      setTaskTitle("");
-    } catch (err) {
-      console.error("Create task failed:", err.message);
-    }
-  };
+  const completedToday = tasks.filter(t => {
+    if (!t.completed) return false;
+    const updated = new Date(t.updatedAt);
+    const today = new Date();
+    return updated.toDateString() === today.toDateString();
+  }).length;
 
-  // Activity type icons
-  const typeIcons = {
-    n8n: "⚡", gemini: "✦", telegram: "✈", system: "⚙", email: "✉", task: "✓"
+  const topTasks = [...tasks]
+    .filter(t => !t.completed)
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+    .slice(0, 6);
+
+  const activityTypeIcon = (type) => {
+    const map = { gemini: '✦', n8n: '⚡', system: '◈' };
+    return map[type] || '·';
   };
 
   return (
     <div className="dashboard-scroll">
-      <div className="animate-fade-in">
-        <h2 className="text-2xl font-semibold mb-1">{greeting}</h2>
-        <p className="text-secondary mb-6">Here is your AI-curated daily brief and task priorities.</p>
-
-        <div className="metrics-banner">
-          <div className="metric-item">
-            <span className="metric-title">Productivity Score</span>
-            <div className="metric-value">{productivityScore}<span className="metric-denom">/100</span></div>
-            <div className={`metric-trend ${productivityScore >= 50 ? 'up' : 'down'}`}>
-              {completedTasks} of {totalTasks} tasks done
-            </div>
+      {/* Header */}
+      <div className="animate-fade-in" style={{ marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <h2 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '0.2rem' }}>Dashboard</h2>
+            <p className="text-secondary" style={{ fontSize: '0.8125rem' }}>
+              {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </p>
           </div>
-
-          <div className="metric-item">
-            <span className="metric-title">Tasks Completed</span>
-            <div className="metric-value">{completedTasks}</div>
-            <div className="metric-trend up">{pendingTasks} remaining</div>
-          </div>
-
-          <div className="metric-item">
-            <span className="metric-title">Activity Events</span>
-            <div className="metric-value">{activities.length}</div>
-            <div className="metric-trend">Recent system events</div>
-          </div>
-
-          <div className="metric-item">
-            <span className="metric-title">High Priority</span>
-            <div className="metric-value">{highPriorityTasks}</div>
-            <div className={`metric-trend ${highPriorityTasks > 0 ? 'down' : 'up'}`}>
-              {highPriorityTasks > 0 ? "Needs attention" : "All clear"}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="dashboard-grid animate-fade-in delay-1">
-        <div className="panel glass">
-          <div className="panel-header">
-            <h3 className="panel-title">Productivity Analytics</h3>
-          </div>
-          <div style={{ height: '300px', width: '100%' }}>
-            {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
-                  <XAxis dataKey="time" stroke="var(--text-secondary)" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis stroke="var(--text-secondary)" fontSize={11} tickLine={false} axisLine={false} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#121214', borderColor: 'var(--border-color)', borderRadius: '6px' }}
-                    itemStyle={{ color: 'var(--text-primary)' }}
-                  />
-                  <Line type="monotone" dataKey="score" stroke="var(--text-primary)" strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 0, fill: 'var(--success)' }} />
-                  <Line type="monotone" dataKey="tasks" stroke="var(--text-secondary)" strokeWidth={1} dot={false} strokeDasharray="4 4" />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="empty-state">
-                <p>No task data yet. Create some tasks to see analytics.</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="panel glass">
-          <div className="panel-header">
-            <h3 className="panel-title">System Activity</h3>
-          </div>
-          <div className="create-task-bar">
-            <input
-              type="text"
-              placeholder="Create new task..."
-              value={newTaskTitle}
-              onChange={(e) => setTaskTitle(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && createTask()}
-            />
-            <button onClick={createTask}>
-              <Plus size={14} />
-              Add
-            </button>
-          </div>
-          <div className="activity-list">
-            {activities.length === 0 && !loading && (
-              <div className="activity-item">
-                <div className="activity-details">
-                  <p className="text-secondary">No activity yet. Trigger a workflow to get started.</p>
-                </div>
-              </div>
-            )}
-            {activities.map(log => (
-              <div key={log._id} className="activity-item">
-                <div className="activity-details">
-                  <p>
-                    <span className="activity-type-icon">{typeIcons[log.type] || "•"}</span>
-                    {" "}{log.title}
-                  </p>
-                  <div className="activity-time">{timeAgo(log.createdAt)}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="panel glass animate-fade-in delay-2">
-        <div className="panel-header">
-          <h3 className="panel-title">AI-Prioritized Tasks</h3>
-          <button className="btn-primary" onClick={runWorkflow} disabled={workflowLoading}>
-            {workflowLoading ? "Running..." : "Run Workflow"}
+          <button className="icon-btn" onClick={load} title="Refresh">
+            <RefreshCw size={15} />
           </button>
         </div>
+      </div>
 
-        <div className="task-list">
-          {loading && (
+      {/* Stat Cards */}
+      <div className="stats-grid animate-fade-in">
+        <StatCard icon={CheckCircle2} label="Active Tasks" value={tasks.filter(t => !t.completed).length} sub={`${completedToday} done today`} color="var(--success)" />
+        <StatCard icon={Mail} label="Emails" value={emails.length} sub={`${emails.filter(e => !e.processed).length} unprocessed`} color="#60a5fa" />
+        <StatCard icon={FileText} label="Notes" value={notes.length} color="var(--warning)" />
+        <StatCard icon={TrendingUp} label="Completed" value={tasks.filter(t => t.completed).length} sub={`of ${tasks.length} total`} color="var(--text-secondary)" />
+      </div>
+
+      <div className="dashboard-cols animate-fade-in delay-1">
+        {/* Top Tasks */}
+        <div className="panel glass">
+          <div className="panel-header">
+            <h3 className="panel-title"><TrendingUp size={14} /> Priority Queue</h3>
+            <span className="text-secondary" style={{ fontSize: '0.75rem' }}>by score</span>
+          </div>
+          {loading ? (
             <div className="task-loading-skeleton">
-              {[1, 2, 3].map(i => <div key={i} className="skeleton-row" />)}
+              {[1,2,3,4].map(i => <div key={i} className="skeleton-row" />)}
             </div>
-          )}
-          {!loading && tasks.length === 0 && (
-            <p className="text-secondary" style={{ padding: '1rem', textAlign: 'center' }}>No tasks yet. Create one above or trigger an email ingestion workflow.</p>
-          )}
-          {tasks
-            .sort((a, b) => (b.score || 0) - (a.score || 0))
-            .map(task => (
-              <div key={task._id} className={`task-item ${task.completed ? 'opacity-50' : ''}`}>
-                <div className="task-content">
-                  <div
-                    className={`task-checkbox ${task.completed ? 'completed' : ''}`}
-                    onClick={() => toggleTask(task._id)}
-                  >
-                    {task.completed && <CheckCircle2 size={14} color="white" />}
-                  </div>
-                  <div className="task-info">
-                    <h4 style={{ textDecoration: task.completed ? 'line-through' : 'none', color: task.completed ? 'var(--text-secondary)' : 'var(--text-primary)' }}>
-                      {task.title}
-                    </h4>
-                    <div className="task-meta">
-                      <span>Source: {task.source}</span>
-                      <span>•</span>
-                      <span>{task.time || (task.deadline ? new Date(task.deadline).toLocaleDateString() : 'No deadline')}</span>
-                      {task.reason && task.reason !== "Rule-based scoring" && (
-                        <>
-                          <span>•</span>
-                          <span className="task-reason">{task.reason}</span>
-                        </>
-                      )}
+          ) : topTasks.length === 0 ? (
+            <div className="empty-state"><Circle size={28} /><p>No pending tasks</p></div>
+          ) : (
+            <div>
+              {topTasks.map(task => (
+                <div key={task._id} className="task-row">
+                  <div className="task-row-left">
+                    <div className="task-priority-dot" style={{ background: PRIORITY_COLORS[task.priority] || 'var(--text-muted)' }} />
+                    <div>
+                      <div className="task-title">{task.title}</div>
+                      {task.reason && <div className="task-reason">{task.reason}</div>}
                     </div>
                   </div>
-                </div>
-
-                <div style={{ gap: '0.5rem', display: 'flex', alignItems: 'center' }}>
-                  <div className="score-badge">AI: {task.score}</div>
-                  <div className={`priority-badge priority-${task.priority}`}>
-                    {(task.priority || "low").toUpperCase()}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                    <span className={`priority-badge priority-${task.priority}`}>{task.priority}</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{task.score}</span>
                   </div>
                 </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Right column */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {/* Daily Brief */}
+          <div className="panel glass">
+            <div className="panel-header">
+              <h3 className="panel-title"><Zap size={14} /> Daily Brief</h3>
+              <button className="btn-sm" onClick={generateBrief} disabled={briefLoading}>
+                {briefLoading ? <><RefreshCw size={12} className="spin" /> Generating...</> : 'Generate'}
+              </button>
+            </div>
+            {!brief ? (
+              <p className="text-secondary" style={{ fontSize: '0.8125rem', padding: '0.5rem 0' }}>
+                Click Generate to get an AI summary of your day.
+              </p>
+            ) : (
+              <div style={{ fontSize: '0.8125rem', lineHeight: 1.7, color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
+                {brief.brief || brief.summary || JSON.stringify(brief)}
               </div>
-            ))}
+            )}
+          </div>
+
+          {/* Recent Activity */}
+          <div className="panel glass">
+            <div className="panel-header">
+              <h3 className="panel-title"><Clock size={14} /> Activity</h3>
+            </div>
+            {loading ? (
+              <div className="task-loading-skeleton">{[1,2,3].map(i => <div key={i} className="skeleton-row" style={{ height: 36 }} />)}</div>
+            ) : activity.length === 0 ? (
+              <p className="text-secondary" style={{ fontSize: '0.8125rem' }}>No activity yet.</p>
+            ) : (
+              <div>
+                {activity.map(a => (
+                  <div key={a._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '0.5rem 0', borderBottom: '1px solid var(--border-color)' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', flex: 1, minWidth: 0 }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', flexShrink: 0, marginTop: 2 }}>{activityTypeIcon(a.type)}</span>
+                      <div>
+                        <div style={{ fontSize: '0.8125rem', fontWeight: 500 }}>{a.title}</div>
+                        {a.details && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{a.details}</div>}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', flexShrink: 0, marginLeft: '0.5rem' }}>{timeAgo(a.createdAt)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

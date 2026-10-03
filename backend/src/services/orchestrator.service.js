@@ -1,117 +1,120 @@
 /**
- * Orchestrator Service — the central "brain" that wires together:
- *   ingestion → processing → scoring → storage → logging
- * 
- * Called by n8n inbound webhooks and internal routes.
- * Each function handles a complete end-to-end flow.
+ * Orchestrator Service
+ *
+ * Coordinates AI processing pipelines:
+ * 1. Receive raw email data from n8n
+ * 2. Summarise + extract tasks with Gemini
+ * 3. Generate embedding and add to FAISS index
+ * 4. Persist everything to MongoDB
  */
 
+import { getLLM } from "./llm/index.js";
+import { scoreTask } from "./ai.service.js";
 import { Email } from "../models/email.model.js";
 import { Task } from "../models/task.model.js";
 import { Activity } from "../models/activity.model.js";
-import { summarizeText, extractTasks, scoreTask } from "./ai.service.js";
+import { addDocument, persistIndex } from "./faiss.service.js";
 
 
 /**
- * Process a raw email end-to-end:
- *   1. Store the raw email
- *   2. Summarize it with the LLM
- *   3. Extract tasks from it
- *   4. Score and create each task
- *   5. Log all activity
- * 
- * @param {object} emailData - Raw email fields (from, to, subject, body, etc.)
- * @returns {object} The processed email with created tasks
+ * Process a single incoming email from n8n.
+ *
+ * Steps:
+ *  1. Check for duplicates via messageId
+ *  2. Store raw email
+ *  3. Summarise with Gemini
+ *  4. Extract tasks with Gemini, score + persist each
+ *  5. Generate embedding → add to FAISS
+ *  6. Mark email processed, save
+ *
+ * @param {object} emailData - { from, to, subject, body, messageId?, threadId?, labels? }
+ * @returns {{ email, tasks, skipped }}
  */
 export async function processIncomingEmail(emailData) {
-    const { from, to, subject, body, messageId, threadId, labels, receivedAt } = emailData;
+    const { from, to = "", subject, body, messageId, threadId, labels } = emailData;
 
-    // 1. Store raw email (or find existing by messageId to avoid duplicates)
-    let email;
+    if (!from || !subject || !body) {
+        throw new Error("Email must have from, subject, and body.");
+    }
+
+    // 1. Dedup check
     if (messageId) {
-        email = await Email.findOne({ messageId });
-        if (email && email.processed) {
-            return { email, tasks: [], skipped: true, reason: "Already processed" };
+        const existing = await Email.findOne({ messageId });
+        if (existing) {
+            console.log(`[Orchestrator] Skipping duplicate email: ${messageId}`);
+            return { email: existing, tasks: [], skipped: true };
         }
     }
 
-    if (!email) {
-        email = await Email.create({
-            from, to, subject, body,
-            messageId, threadId, labels,
-            receivedAt: receivedAt || new Date(),
-            processed: false,
-        });
-    }
+    // 2. Store raw email
+    const email = await Email.create({ from, to, subject, body, messageId, threadId, labels });
 
-    // Log that we received the email
-    await Activity.create({
-        type: "email",
-        title: `Ingested email: "${subject}"`,
-        details: `From: ${from}`,
-        relatedId: email._id,
-        relatedModel: "Email",
-        status: "running",
-    });
+    const llm = getLLM();
 
-    // 2. Summarize the email body
+    // 3. Summarise
     let summary = null;
     try {
-        const result = await summarizeText(`Subject: ${subject}\n\n${body}`);
-        summary = result.summary;
+        const summarisePrompt = `Summarise the following email in 2-3 concise sentences. Focus on the key information and any action items.\n\nEmail:\nFrom: ${from}\nSubject: ${subject}\n\n${body}`;
+        summary = await llm.generateText(summarisePrompt, { temperature: 0.3, maxTokens: 256 });
         email.summary = summary;
     } catch (err) {
-        console.warn("Email summarization failed:", err.message);
-        summary = `Email from ${from}: ${subject}`;
-        email.summary = summary;
+        console.warn(`[Orchestrator] Summarise failed for "${subject}":`, err.message);
     }
 
-    // 3. Extract tasks from the email
-    let extractedTasks = [];
-    try {
-        const result = await extractTasks(`Subject: ${subject}\n\n${body}`);
-        extractedTasks = result.tasks || [];
-    } catch (err) {
-        console.warn("Task extraction failed:", err.message);
-    }
-
-    // 4. Score and create each extracted task
+    // 4. Extract tasks
     const createdTasks = [];
-    for (const taskData of extractedTasks) {
-        try {
-            const taskObj = {
-                title: taskData.title,
-                description: `Extracted from email: "${subject}" from ${from}`,
-                source: "Email",
-                category: "email",
-                deadline: taskData.deadline || null,
-                time: taskData.deadline || "No deadline",
-                completed: false,
-                sourceEmailId: email._id,
-            };
+    try {
+        const extractPrompt = `Extract all actionable tasks from this email. Return a JSON array of tasks.\n\nEach task object must have:\n- title (string, required)\n- deadline (ISO date string or null)\n- suggestedPriority ("critical"|"high"|"medium"|"low")\n- reasoning (1 sentence)\n\nEmail:\nFrom: ${from}\nSubject: ${subject}\n\n${body}\n\nReturn ONLY the JSON array, no explanation.`;
+        const extracted = await llm.generateJSON(extractPrompt, { temperature: 0.2 });
+        const taskList = Array.isArray(extracted) ? extracted : (extracted.tasks || []);
 
-            const scored = await scoreTask(taskObj);
-            const task = await Task.create(scored);
-            createdTasks.push(task);
+        for (const taskData of taskList) {
+            try {
+                const scored = await scoreTask({
+                    title: taskData.title,
+                    description: taskData.reasoning || "",
+                    source: "Email",
+                    category: "general",
+                    deadline: taskData.deadline || null,
+                    completed: false,
+                    sourceEmailId: email._id,
+                });
+                const task = await Task.create(scored);
+                createdTasks.push(task);
 
-            // Link task back to email's extractedTasks array
-            email.extractedTasks.push({
-                title: taskData.title,
-                deadline: taskData.deadline,
-                suggestedPriority: taskData.suggestedPriority,
-                reasoning: taskData.reasoning,
-                taskId: task._id,
-            });
-        } catch (err) {
-            console.warn(`Failed to create task "${taskData.title}":`, err.message);
+                email.extractedTasks.push({
+                    title: taskData.title,
+                    deadline: taskData.deadline,
+                    suggestedPriority: taskData.suggestedPriority,
+                    reasoning: taskData.reasoning,
+                    taskId: task._id,
+                });
+            } catch (err) {
+                console.warn(`[Orchestrator] Failed to create task "${taskData.title}":`, err.message);
+            }
         }
+    } catch (err) {
+        console.warn(`[Orchestrator] Task extraction failed for "${subject}":`, err.message);
     }
 
-    // 5. Mark email as processed and save
+    // 5. Generate embedding and index in FAISS
+    try {
+        const textToEmbed = `${subject} ${body.substring(0, 500)}`;
+        const embedding = await llm.generateEmbedding(textToEmbed);
+        email.embedding = embedding;
+        addDocument(email._id.toString(), "email", embedding, {
+            title: subject,
+            snippet: summary ? summary.substring(0, 120) : body.substring(0, 120),
+        });
+        persistIndex();
+    } catch (err) {
+        console.warn(`[Orchestrator] Embedding failed for "${subject}":`, err.message);
+    }
+
+    // 6. Mark processed and save
     email.processed = true;
     await email.save();
 
-    // Log completion
     await Activity.create({
         type: "gemini",
         title: `Processed email: "${subject}"`,
@@ -126,19 +129,17 @@ export async function processIncomingEmail(emailData) {
 
 
 /**
- * Process a batch of emails (called when n8n sends multiple at once).
+ * Process a batch of emails.
  */
 export async function processBatchEmails(emails) {
     const results = [];
-
     for (const emailData of emails) {
         try {
             const result = await processIncomingEmail(emailData);
             results.push({ success: true, ...result });
         } catch (err) {
-            console.error(`Failed to process email "${emailData.subject}":`, err.message);
+            console.error(`[Orchestrator] Failed to process "${emailData.subject}":`, err.message);
             results.push({ success: false, subject: emailData.subject, error: err.message });
-
             await Activity.create({
                 type: "system",
                 title: `Failed to process email: "${emailData.subject}"`,
@@ -147,14 +148,12 @@ export async function processBatchEmails(emails) {
             });
         }
     }
-
     return results;
 }
 
 
 /**
- * Process a directly-submitted task (from n8n or external sources).
- * Scores it and stores it.
+ * Process a directly-submitted task from n8n.
  */
 export async function processIncomingTask(taskData) {
     const scored = await scoreTask({
@@ -163,7 +162,6 @@ export async function processIncomingTask(taskData) {
         source: taskData.source || "n8n",
         category: taskData.category || "general",
         deadline: taskData.deadline || null,
-        time: taskData.deadline || taskData.time || "No deadline",
         completed: false,
     });
 
