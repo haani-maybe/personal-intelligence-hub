@@ -6,6 +6,7 @@ import { scoreTask, summarizeText, extractTasks, classifyUrgency, generateDailyB
 import { Task } from "../models/task.model.js";
 import { Email } from "../models/email.model.js";
 import { Note } from "../models/note.model.js";
+import { DailyBrief } from "../models/dailyBrief.model.js";
 import { getLLM } from "../services/llm/index.js";
 import { search } from "../services/faiss.service.js";
 
@@ -113,11 +114,29 @@ router.post("/classify-urgency", async (req, res) => {
 
 
 // Generate a daily brief from all current tasks
+// GET /api/ai/daily-brief — today's saved brief, or null if none generated yet
+router.get("/daily-brief", async (req, res) => {
+    try {
+        const today = new Date().toISOString().split("T")[0];
+        const saved = await DailyBrief.findOne({ date: today });
+        res.json(saved);
+    } catch (err) {
+        console.error("Fetch daily brief error:", err.message);
+        res.status(500).json({ error: "Failed to fetch daily brief", details: err.message });
+    }
+});
+
+// POST /api/ai/daily-brief — (re)generate today's brief and save it (one per day)
 router.post("/daily-brief", async (req, res) => {
     try {
         const tasks = await Task.find();
         const result = await generateDailyBrief(tasks.map(t => t.toObject()));
-        res.json(result);
+        const saved = await DailyBrief.findOneAndUpdate(
+            { date: result.date },
+            { brief: result.brief, stats: result.stats },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+        res.json(saved);
     } catch (err) {
         console.error("Daily brief error:", err.message);
         res.status(500).json({ error: "Failed to generate daily brief", details: err.message });
