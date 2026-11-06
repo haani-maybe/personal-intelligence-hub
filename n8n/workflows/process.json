@@ -11,7 +11,8 @@
     },
     {
       "parameters": {
-        "url": "http://host.docker.internal:5000/api/tasks",
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/tasks/rescore",
         "options": {}
       },
       "name": "Rescore Tasks",

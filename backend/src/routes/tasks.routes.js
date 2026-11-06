@@ -5,23 +5,36 @@ import {scoreTask} from "../services/ai.service.js"
 
 const router = express.Router()
 
-//gets tasks above, turn to json, so frontend can utilize
+// copy every scoring field from scoreTask onto the mongoose doc
+const SCORE_FIELDS = ["score", "priority", "ruleScore", "llmScore", "urgencyLabel", "reason"]
+function applyScore(task, scored) {
+    SCORE_FIELDS.forEach(f => { task[f] = scored[f] })
+}
+
+//gets stored tasks, scores are saved on create/edit so no LLM calls happen here
 router.get("/", async (req, res) => {
     try {
-        //below gives u all task documents in collection.
-        const tasks = await Task.find();
-
-        //auto scores everytime it fetches tasks from data
-        const scoredTasks = await Promise.all(
-            tasks.map(task =>
-                //using toObject to turn mongoose document to js object
-                scoreTask(task.toObject())
-            )
-        );
-        res.json(scoredTasks);
+        const tasks = await Task.find().sort({ completed: 1, score: -1 });
+        res.json(tasks);
     } catch (err) {
         console.error("Fetch tasks error:", err.message);
         res.status(500).json({ error: "Failed to fetch tasks", details: err.message });
+    }
+});
+
+//RESCORE ALL OPEN TASKS (used by the n8n process workflow, deadlines drift so scores go stale)
+//done one at a time so we dont hammer the LLM rate limit
+router.post("/rescore", async (req, res) => {
+    try {
+        const tasks = await Task.find({ completed: false });
+        for (const task of tasks) {
+            applyScore(task, await scoreTask(task.toObject()));
+            await task.save();
+        }
+        res.json({ message: `Rescored ${tasks.length} tasks`, count: tasks.length });
+    } catch (err) {
+        console.error("Rescore error:", err.message);
+        res.status(500).json({ error: "Failed to rescore tasks", details: err.message });
     }
 });
 
@@ -50,9 +63,7 @@ router.patch("/:id", async (req, res) => {
         } else {
             task.completed = !task.completed
         }
-        const scored = await scoreTask(task.toObject());
-        task.priority = scored.priority
-        task.score = scored.score
+        applyScore(task, await scoreTask(task.toObject()))
 
         await task.save()
 
