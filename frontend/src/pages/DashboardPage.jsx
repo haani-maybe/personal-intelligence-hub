@@ -5,6 +5,7 @@ import {
   Clock, Circle
 } from 'lucide-react';
 import { apiGet, apiPost, timeAgo } from '../api.js';
+import TaskDetailPanel from '../components/TaskDetailPanel.jsx';
 
 const PRIORITY_COLORS = {
   critical: 'var(--danger)',
@@ -34,6 +35,7 @@ export default function DashboardPage() {
   const [brief, setBrief] = useState(null);
   const [briefLoading, setBriefLoading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [selectedTask, setSelectedTask] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -88,6 +90,20 @@ export default function DashboardPage() {
 
   return (
     <div className="dashboard-scroll">
+      {selectedTask && (
+        <TaskDetailPanel
+          task={selectedTask}
+          onClose={() => setSelectedTask(null)}
+          onSaved={(t) => {
+            setTasks(prev => prev.map(x => x._id === t._id ? t : x));
+            setSelectedTask(null);
+          }}
+          onDeleted={(id) => {
+            setTasks(prev => prev.filter(x => x._id !== id));
+            setSelectedTask(null);
+          }}
+        />
+      )}
       {/* Header */}
       <div className="animate-fade-in" style={{ marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -127,7 +143,7 @@ export default function DashboardPage() {
           ) : (
             <div>
               {topTasks.map(task => (
-                <div key={task._id} className="task-row">
+                <div key={task._id} className="task-row clickable" onClick={() => setSelectedTask(task)}>
                   <div className="task-row-left">
                     <div className="task-priority-dot" style={{ background: PRIORITY_COLORS[task.priority] || 'var(--text-muted)' }} />
                     <div>
