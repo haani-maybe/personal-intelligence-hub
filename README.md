@@ -92,7 +92,9 @@ n8n UI → http://localhost:5678
 |---|---|---|
 | `GET` | `/api/tasks` | List all tasks (auto-scored) |
 | `POST` | `/api/tasks` | Create a task |
-| `PATCH` | `/api/tasks/:id` | Toggle completion |
+| `PATCH` | `/api/tasks/:id` | Toggle completion, or edit title/description/deadline/category |
+| `DELETE` | `/api/tasks/:id` | Delete task |
+| `POST` | `/api/tasks/rescore` | Rescore all open tasks |
 
 ### Emails
 | Method | Path | Description |
@@ -141,7 +143,7 @@ The workflows call the backend at `host.docker.internal:5000` since n8n runs in 
 
 **Email Ingest**: runs every 15 min (or when the backend hits `/webhook/email-ingest`), fetches unread Gmail, POSTs them in a batch to `POST /api/n8n/ingest-email`. Backend summarises, extracts tasks, embeds and stores everything.
 
-**Process Pipeline**: hit via `/webhook/process`, rescores all tasks (`GET /api/tasks`) then generates a daily brief (`POST /api/ai/daily-brief`).
+**Process Pipeline**: hit via `/webhook/process`, rescores all open tasks (`POST /api/tasks/rescore`) then generates a daily brief (`POST /api/ai/daily-brief`).
 
 ---
 
