@@ -21,6 +21,9 @@ const taskSchema = new mongoose.Schema({
     // Status
     completed: { type: Boolean, default: false },
 
+    // vector for semantic search, hidden from queries unless asked for (select: false)
+    embedding: { type: [Number], default: [], select: false },
+
     // Provenance — what created this task
     sourceEmailId: { type: mongoose.Schema.Types.ObjectId, ref: "Email", default: null },
 }, {
