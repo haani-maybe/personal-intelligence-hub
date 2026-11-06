@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, ChevronLeft, Plus, CheckCircle2, Clock, RefreshCw, Inbox } from 'lucide-react';
+import { Mail, ChevronLeft, ChevronRight, Plus, CheckCircle2, Clock, Inbox } from 'lucide-react';
 import { apiGet, apiPost, timeAgo } from '../api.js';
 
 export default function InboxPage() {
