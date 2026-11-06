@@ -1,6 +1,7 @@
 import express from "express"
 import {Task} from "../models/task.model.js"
 import {scoreTask} from "../services/ai.service.js"
+import {indexTask, unindexTask} from "../services/indexing.service.js"
 
 
 const router = express.Router()
@@ -55,6 +56,7 @@ router.patch("/:id", async (req, res) => {
         task.score = scored.score
 
         await task.save()
+        if (edits.length > 0) indexTask(task)   // text changed, re-embed (not awaited)
 
         res.json(task); //updated task sent back as json to frontend (http response)
     } catch (err) {
@@ -68,6 +70,7 @@ router.delete("/:id", async (req, res) => {
     try {
         const task = await Task.findByIdAndDelete(req.params.id)
         if (!task) return res.status(404).json({ error: "Not found" })
+        unindexTask(req.params.id)
         res.json({ message: "Task deleted", id: req.params.id })
     } catch (err) {
         console.error("Delete task error:", err.message);
@@ -79,6 +82,7 @@ router.post("/", async(req, res) => {
     try {
         const scoredTask = await scoreTask(req.body)
         const newTask = await Task.create(scoredTask)
+        indexTask(newTask)   // not awaited, embedding happens in the background
 
         res.status(201).json(newTask);
     } catch (err) {

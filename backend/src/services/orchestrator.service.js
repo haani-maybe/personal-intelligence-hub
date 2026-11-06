@@ -14,6 +14,7 @@ import { Email } from "../models/email.model.js";
 import { Task } from "../models/task.model.js";
 import { Activity } from "../models/activity.model.js";
 import { addDocument, persistIndex } from "./faiss.service.js";
+import { indexTask } from "./indexing.service.js";
 
 
 /**
@@ -80,6 +81,7 @@ export async function processIncomingEmail(emailData) {
                     sourceEmailId: email._id,
                 });
                 const task = await Task.create(scored);
+                indexTask(task);
                 createdTasks.push(task);
 
                 email.extractedTasks.push({
@@ -166,6 +168,7 @@ export async function processIncomingTask(taskData) {
     });
 
     const task = await Task.create(scored);
+    indexTask(task);
 
     await Activity.create({
         type: "n8n",
