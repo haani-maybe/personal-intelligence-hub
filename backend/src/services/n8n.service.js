@@ -5,7 +5,7 @@
  * Inbound:  n8n calls our /api/n8n/* endpoints (defined in n8n.routes.js).
  */
 
-const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || "http://localhost:5678/webhook/trigger";
+const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || "http://localhost:5678/webhook";
 const N8N_AUTH_HEADER = process.env.N8N_AUTH_HEADER || "";
 
 /**

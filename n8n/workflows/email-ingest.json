@@ -1,0 +1,63 @@
+{
+  "name": "Email Ingest",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "minutes", "minutesInterval": 15 }] } },
+      "name": "Every 15 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": { "httpMethod": "POST", "path": "email-ingest", "options": {} },
+      "name": "Manual Trigger Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 200],
+      "webhookId": "email-ingest"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 20,
+        "simple": true,
+        "filters": { "readStatus": "unread" }
+      },
+      "name": "Fetch Unread Gmail",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [260, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// normalise gmail output into what /api/n8n/ingest-email expects\nconst emails = $input.all().map(({ json: m }) => ({\n  from: m.From || m.from?.text || m.from || '',\n  to: m.To || m.to?.text || m.to || '',\n  subject: m.Subject || m.subject || '(no subject)',\n  body: m.text || m.textPlain || m.snippet || '',\n  messageId: m.id,\n  threadId: m.threadId,\n  labels: m.labelIds || [],\n  receivedAt: m.internalDate ? new Date(Number(m.internalDate)).toISOString() : new Date().toISOString(),\n})).filter(e => e.from && e.body);\n\nreturn [{ json: { emails } }];"
+      },
+      "name": "Format Emails",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/n8n/ingest-email",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "name": "POST to Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [780, 100]
+    }
+  ],
+  "connections": {
+    "Every 15 min": { "main": [[{ "node": "Fetch Unread Gmail", "type": "main", "index": 0 }]] },
+    "Manual Trigger Webhook": { "main": [[{ "node": "Fetch Unread Gmail", "type": "main", "index": 0 }]] },
+    "Fetch Unread Gmail": { "main": [[{ "node": "Format Emails", "type": "main", "index": 0 }]] },
+    "Format Emails": { "main": [[{ "node": "POST to Backend", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

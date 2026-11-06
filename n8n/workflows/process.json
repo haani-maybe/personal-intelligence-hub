@@ -1,0 +1,40 @@
+{
+  "name": "Process Pipeline",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "process", "responseMode": "lastNode", "options": {} },
+      "name": "Process Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "process"
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:5000/api/tasks",
+        "options": {}
+      },
+      "name": "Rescore Tasks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/ai/daily-brief",
+        "options": {}
+      },
+      "name": "Generate Daily Brief",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 0],
+      "executeOnce": true
+    }
+  ],
+  "connections": {
+    "Process Webhook": { "main": [[{ "node": "Rescore Tasks", "type": "main", "index": 0 }]] },
+    "Rescore Tasks": { "main": [[{ "node": "Generate Daily Brief", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}
