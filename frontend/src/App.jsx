@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, NavLink, useNavigate } from 'react-router-dom';
 import { Search, Bell, Settings, X, Mail, FileText, CheckSquare, Loader } from 'lucide-react';
 import './index.css';
@@ -10,10 +10,24 @@ import NotesPage from './pages/NotesPage.jsx';
 import { apiPost } from './api.js';
 
 function SearchModal({ onClose }) {
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState(null);
   const [searching, setSearching] = useState(false);
   const debounceRef = useRef(null);
+
+  // jump to the page that owns the result
+  const openResult = (r) => {
+    const routes = { email: '/inbox', note: '/notes', task: '/' };
+    navigate(routes[r.type] || '/');
+    onClose();
+  };
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const doSearch = async (q) => {
     if (!q.trim()) { setResults(null); return; }
@@ -63,7 +77,7 @@ function SearchModal({ onClose }) {
               <div className="search-empty">No results for "{query}"</div>
             ) : (
               results.map((r, i) => (
-                <div key={i} className="search-result-item">
+                <div key={i} className="search-result-item" onClick={() => openResult(r)}>
                   <div className="search-result-type">{typeIcon(r.type)}<span>{r.type}</span></div>
                   <div className="search-result-title">{r.title}</div>
                   {r.snippet && <div className="search-result-snippet">{r.snippet}</div>}
@@ -80,6 +94,18 @@ function SearchModal({ onClose }) {
 
 function AppInner() {
   const [searchOpen, setSearchOpen] = useState(false);
+
+  // ctrl/cmd + K opens search from anywhere
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen(o => !o);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   return (
     <div className="app-container">
@@ -102,7 +128,7 @@ function AppInner() {
           <div className="search-bar" onClick={() => setSearchOpen(true)} style={{ cursor: 'pointer' }}>
             <Search size={14} className="text-secondary" />
             <span className="search-input" style={{ color: 'var(--text-muted)', userSelect: 'none' }}>Search...</span>
-            <kbd className="search-shortcut">⌘K</kbd>
+            <kbd className="search-shortcut">{navigator.platform.includes("Mac") ? "⌘K" : "Ctrl K"}</kbd>
           </div>
           <button className="icon-btn"><Bell size={18} /></button>
           <button className="icon-btn"><Settings size={18} /></button>

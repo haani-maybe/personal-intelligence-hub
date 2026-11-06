@@ -40,7 +40,7 @@ router.post("/search", async (req, res) => {
                 }
                 if (hit.type === "task") {
                     const doc = await Task.findById(hit.id).select("title priority score deadline completed");
-                    return { ...hit, priority: doc?.priority, score: doc?.score, deadline: doc?.deadline, completed: doc?.completed };
+                    return { ...hit, priority: doc?.priority, taskScore: doc?.score, deadline: doc?.deadline, completed: doc?.completed };
                 }
                 return hit;
             } catch {
