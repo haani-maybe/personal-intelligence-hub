@@ -11,10 +11,10 @@ export default function NotesPage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(null);
 
-  const load = async (tag = null) => {
+  const load = async () => {
     setLoading(true);
     try {
-      const url = tag ? `/notes?tag=${encodeURIComponent(tag)}` : '/notes';
+      const url = '/notes';
       const data = await apiGet(url);
       setNotes(data);
     } catch (err) {
@@ -27,11 +27,12 @@ export default function NotesPage() {
   useEffect(() => { load(); }, []);
 
   const allTags = [...new Set(notes.flatMap(n => n.tags || []))];
+  const visibleNotes = activeTag ? notes.filter(n => n.tags?.includes(activeTag)) : notes;
 
   const filterByTag = (tag) => {
     const next = activeTag === tag ? null : tag;
     setActiveTag(next);
-    load(next);
+    // tags come from the full list, filtering is client side so other tags dont disappear
   };
 
   const saveNote = async (e) => {
@@ -43,7 +44,7 @@ export default function NotesPage() {
       await apiPost('/notes', { title: form.title, content: form.content, tags });
       setForm({ title: '', content: '', tags: '' });
       setShowForm(false);
-      load(activeTag);
+      load();
     } catch (err) {
       console.error('Save note error:', err.message);
     } finally {
@@ -133,7 +134,7 @@ export default function NotesPage() {
       {/* Notes grid */}
       {loading ? (
         <div className="task-loading-skeleton">{[1,2,3].map(i => <div key={i} className="skeleton-row" style={{ height: 100 }} />)}</div>
-      ) : notes.length === 0 ? (
+      ) : visibleNotes.length === 0 ? (
         <div className="empty-state" style={{ marginTop: '3rem' }}>
           <FileText size={32} />
           <p>No notes yet.</p>
@@ -141,7 +142,7 @@ export default function NotesPage() {
         </div>
       ) : (
         <div className="notes-grid animate-fade-in">
-          {notes.map(note => (
+          {visibleNotes.map(note => (
             <div key={note._id} className="panel glass note-card">
               <div className="note-card-header">
                 <h4 className="note-title">{note.title}</h4>
