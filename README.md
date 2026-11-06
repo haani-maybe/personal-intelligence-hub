@@ -77,10 +77,10 @@ n8n UI → http://localhost:5678
 | Variable | Description | Default |
 |---|---|---|
 | `PORT` | Backend port | `5000` |
-| `MONGODB_URI` | MongoDB connection string | `mongodb://localhost:27017/ai-hub` |
+| `MONGO_URI` | MongoDB connection string | `mongodb://localhost:27017/ai-hub` |
 | `GEMINI_API_KEY` | Google Gemini API key | *(required)* |
 | `LLM_PROVIDER` | `gemini` or `openai` | `gemini` |
-| `N8N_WEBHOOK_URL` | n8n webhook base URL | `http://localhost:5678/webhook/trigger` |
+| `N8N_WEBHOOK_URL` | n8n webhook base URL | `http://localhost:5678/webhook` |
 | `N8N_AUTH_HEADER` | Bearer token for n8n auth (optional) | *(empty = open)* |
 
 ---
@@ -131,16 +131,17 @@ n8n UI → http://localhost:5678
 ## n8n Workflow Setup
 
 1. Open n8n at http://localhost:5678
-2. Go to **Workflows → Import**
-3. Import `n8n/workflows/email-ingest.json`
-4. Set your Gmail credentials in the Gmail node
-5. Activate the workflow
+2. Go to **Workflows → Import from file** and import both:
+   - `n8n/workflows/email-ingest.json`
+   - `n8n/workflows/process.json`
+3. Set your Gmail credentials in the **Fetch Unread Gmail** node
+4. Activate both workflows (the backend triggers them through the production webhook URLs, so they have to be active)
 
-The email ingestion workflow:
-- Runs on a schedule (every 15 min)
-- Fetches unread Gmail messages
-- POSTs each email to `POST /api/n8n/ingest-email`
-- Backend summarises, extracts tasks, generates embeddings, and stores everything
+The workflows call the backend at `host.docker.internal:5000` since n8n runs in docker. If your backend runs elsewhere, change the URL in the HTTP Request nodes.
+
+**Email Ingest**: runs every 15 min (or when the backend hits `/webhook/email-ingest`), fetches unread Gmail, POSTs them in a batch to `POST /api/n8n/ingest-email`. Backend summarises, extracts tasks, embeds and stores everything.
+
+**Process Pipeline**: hit via `/webhook/process`, rescores all tasks (`GET /api/tasks`) then generates a daily brief (`POST /api/ai/daily-brief`).
 
 ---
 
