@@ -51,3 +51,10 @@ export function getLLM() {
 export function resetLLM() {
     cachedProvider = null;
 }
+
+/**
+ * Inject a provider directly (tests use this to swap in a fake LLM).
+ */
+export function setLLM(provider) {
+    cachedProvider = provider;
+}

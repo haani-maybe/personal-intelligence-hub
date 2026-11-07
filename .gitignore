@@ -34,3 +34,6 @@ dist-ssr
 PLAN.md
 # keep the example env tracked
 !.env.example
+
+# persisted vector index
+faiss_store/

@@ -11,7 +11,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const STORE_DIR = path.join(__dirname, "../../faiss_store");
+// FAISS_STORE_DIR lets tests write somewhere disposable
+const STORE_DIR = process.env.FAISS_STORE_DIR || path.join(__dirname, "../../faiss_store");
 const INDEX_FILE = path.join(STORE_DIR, "index.json");
 
 // Each entry: { id, type, title, snippet, embedding: number[] }
