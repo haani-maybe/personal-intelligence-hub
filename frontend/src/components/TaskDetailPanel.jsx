@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, Trash2, Save, Mail } from 'lucide-react';
 import { apiPatch, apiDelete } from '../api.js';
 

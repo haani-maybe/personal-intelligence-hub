@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, NavLink, useNavigate } from 'react-router-dom';
 import { Search, Bell, Settings, X, Mail, FileText, CheckSquare, Loader } from 'lucide-react';
 import './index.css';
