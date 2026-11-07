@@ -290,7 +290,7 @@ export async function generateDailyBrief(tasks) {
 
     const totalTasks = tasks.length;
     const completedTasks = tasks.filter(t => t.completed).length;
-    const highPriorityTasks = tasks.filter(t => !t.completed && t.priority === "high").length;
+    const highPriorityTasks = tasks.filter(t => !t.completed && ["high", "critical"].includes(t.priority)).length;
     const taskList = tasks
         .filter(t => !t.completed)
         .slice(0, 10) // top 10

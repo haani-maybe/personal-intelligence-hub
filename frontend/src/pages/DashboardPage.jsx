@@ -60,6 +60,11 @@ export default function DashboardPage() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
+  // show today's saved brief if one exists
+  useEffect(() => {
+    apiGet('/ai/daily-brief').then(setBrief).catch(err => console.error('Brief load error:', err.message));
+  }, []);
+
   const generateBrief = async () => {
     setBriefLoading(true);
     try {
@@ -169,16 +174,17 @@ export default function DashboardPage() {
             <div className="panel-header">
               <h3 className="panel-title"><Zap size={14} /> Daily Brief</h3>
               <button className="btn-sm" onClick={generateBrief} disabled={briefLoading}>
-                {briefLoading ? <><RefreshCw size={12} className="spin" /> Generating...</> : 'Generate'}
+                {briefLoading ? <><RefreshCw size={12} className="spin" /> Generating...</> : brief ? 'Regenerate' : 'Generate'}
               </button>
             </div>
             {!brief ? (
               <p className="text-secondary" style={{ fontSize: '0.8125rem', padding: '0.5rem 0' }}>
-                Click Generate to get an AI summary of your day.
+                No brief yet today. Click Generate to get an AI summary of your day.
               </p>
             ) : (
               <div style={{ fontSize: '0.8125rem', lineHeight: 1.7, color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
-                {brief.brief || brief.summary || JSON.stringify(brief)}
+                {brief.brief}
+                {brief.updatedAt && <div className="text-secondary" style={{ fontSize: '0.7rem', marginTop: '0.5rem' }}>Generated {timeAgo(brief.updatedAt)}</div>}
               </div>
             )}
           </div>
