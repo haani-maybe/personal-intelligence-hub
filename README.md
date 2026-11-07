@@ -147,6 +147,17 @@ The workflows call the backend at `host.docker.internal:5000` since n8n runs in 
 
 ---
 
+## Testing
+
+```bash
+docker compose up -d mongo      # tests only need Mongo, not n8n
+cd backend && npm test
+```
+
+Route tests run the real routers against a throwaway database (`ai-hub-test-<pid>-<ts>`) with a fake LLM, so no API keys are needed. To use a different Mongo, set `MONGO_TEST_URI=mongodb://host:27017`. The frontend is checked with `npm run lint` and `npm run build`; CI runs all of this on every PR.
+
+---
+
 ## Project Structure
 
 ```
