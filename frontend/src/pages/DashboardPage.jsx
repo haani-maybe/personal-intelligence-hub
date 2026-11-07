@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
-  LayoutDashboard, CheckCircle2, Mail, FileText,
-  TrendingUp, Zap, RefreshCw, ChevronRight, AlertCircle,
+  CheckCircle2, Mail, FileText,
+  TrendingUp, Zap, RefreshCw,
   Clock, Circle
 } from 'lucide-react';
 import { apiGet, apiPost, timeAgo } from '../api.js';
@@ -57,6 +57,7 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   // show today's saved brief if one exists

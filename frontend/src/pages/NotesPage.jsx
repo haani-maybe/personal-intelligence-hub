@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { FileText, Plus, X, Trash2, Tag } from 'lucide-react';
 import { apiGet, apiPost, apiDelete, timeAgo } from '../api.js';
 
@@ -24,6 +24,7 @@ export default function NotesPage() {
     }
   };
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, []);
 
   const allTags = [...new Set(notes.flatMap(n => n.tags || []))];

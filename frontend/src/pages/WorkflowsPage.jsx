@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Zap, Play, Clock, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Zap, Play, Clock, CheckCircle2, XCircle } from 'lucide-react';
 import { apiGet, apiPost, timeAgo } from '../api.js';
 
 export default function WorkflowsPage() {

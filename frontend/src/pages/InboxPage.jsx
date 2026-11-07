@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Mail, ChevronLeft, ChevronRight, Plus, CheckCircle2, Clock, Inbox } from 'lucide-react';
 import { apiGet, apiPost, timeAgo } from '../api.js';
 
